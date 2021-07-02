@@ -37,4 +37,4 @@ methods.forEach(method => {
     if(inserted) ob.observeArray(inserted);
   }
 })
-// 并不会影响 数组原型的方法，只是重写了vue中 data数据中的 数组的原型方法
+// 并不会影响 数组原型的方法，只是重写了vue中 data数据中的 数组的原型方法 
