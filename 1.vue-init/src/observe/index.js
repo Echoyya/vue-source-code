@@ -43,7 +43,7 @@ class Observer{
 // 4) 如果数据不需要响应式 可以使用Object.freeze 冻结属性 
 
 function defineReactive(obj,key,value){    // vue2 慢的原因主要在这个方法中，递归
-  observe(value);  // 递归进行观测
+  observe(value);  // 递归进行观测 不管有多少层，都需要进行defineProperty
   Object.defineProperty(obj,key,{   
     get(){
       return value;    // 形成闭包，会向上层作用域查找value，因此作用域不会销毁

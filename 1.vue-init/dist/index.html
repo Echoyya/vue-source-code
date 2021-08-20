@@ -9,7 +9,7 @@
 </head>
 
 <body>
-  <div id="app">{{message}}</div>
+  <div id="app">{{message}} <p>hello <span>world</span></p></div>
   <script src="./vue.js"></script>
   <script>
     // vue 默认支持响应式数据变化  双向绑定
@@ -22,31 +22,15 @@
     var vm = new Vue({
       el: '#app',
       data(){
-        // console.log(this);
         return {
           message: 'hello123',
           a:1,
-          arr:[{name:'a'},1,2,3],
-          // 数组也是可以使用defineProperty，但是很少采用arr[868] = 100这种方式去修改数组
-          // 如果数组也使用了defineProperty，是可以实现修改索引触发更新的，但是效率低。所以源码中没有采用这种方式
-          // 因此导致的问题就是：数组修改索引不会导致视图的更新，修改length也不会更新
-          // 正常用户修改数组 无非采用数组的变异方法 push pop shift unshift splice reverse sort 会改变原数组
-          // 通过重写原型方法，对以上7个方式进行处理，
+          arr:[{name:'a'},1,2,3]
         }
       }
     })
-    // 什么情况下会更新
-    // vm.message = {'a':100}
-    // vm.message.a = 200
-    // vm.message.b = 300  // vue2 无法劫持到不存在的属性，新增不存在的属性，不会更新视图，但是有方法 $set
-
-    // vm.arr[0].name = 'yy';  // 走对象的修改逻辑
-    // vm.arr[1] = 100; // 如果操作的是数组的索引，那么不会更新视图，因为并没有劫持数组的所以，不能通过更改数组长度和索引(无法监控)
-
-    // 数组的7个方法 都会触发更新
 
     vm.arr.push({a:1},{b:2},{c:3})
-    console.log(vm.arr);
   </script>
 </body>
 

@@ -1,6 +1,6 @@
 let oldArrayPrototype = Array.prototype; // 获取数组 老的原型方法
 
-export let arrayMethods = Object.create(oldArrayPrototype); // 让arrayMethods 通过__proto__能获取到数组的方法
+export let arrayMethods = Object.create(oldArrayPrototype); // 让 arrayMethods 通过__proto__能获取到数组的方法
 
 // arrayMethods.__proto__ = oldArrayPrototype
 // arrayMethods.push = function 
@@ -13,7 +13,7 @@ let methods = [ // 只有这七个方法 可以导致数组发生变化
   'splice',
   'sort',
   'reverse',
-]
+] 
 
 methods.forEach(method => {
   arrayMethods[method] = function (...args) {

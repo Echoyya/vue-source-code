@@ -4,6 +4,161 @@
   (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Vue = factory());
 }(this, (function () { 'use strict';
 
+  const ncname = `[a-zA-Z_][\\-\\.0-9_a-zA-Z]*`; // 匹配标签名的  aa-xxx
+
+  const qnameCapture = `((?:${ncname}\\:)?${ncname})`; //  aa:aa-xxx  
+
+  const startTagOpen = new RegExp(`^<${qnameCapture}`); //  此正则可以匹配到标签名 匹配到结果的第一个(索引第一个) [1]
+
+  const endTag = new RegExp(`^<\\/${qnameCapture}[^>]*>`); // 匹配标签结尾的 </div>  [1]
+
+  const attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/; // 匹配属性的
+  // [1]属性的key   [3] || [4] ||[5] 属性的值  a=1  a='1'  a=""
+
+  const startTagClose = /^\s*(\/?)>/; // 匹配标签结束的  />    > 
+
+  function parserHTML(html) {
+    // 不停的截取模板，直到把模板全部解析完毕
+    // 构建父子关系  div > p > span 此时考查数据结构？
+    // 一般构建父子关系 可以使用栈型数据结构 先进后出  [div, p] 此时p标签的父节点为栈中最后一个节点 div，若标签闭合，从栈中抛出
+    let stack = [];
+    let root = null;
+
+    function createASTElement(tag, attrs, parent = null) {
+      return {
+        tag,
+        attrs,
+        parent,
+        children: [],
+        type: 1
+      };
+    }
+
+    function start(tag, attrs) {
+      // 遇到开始标签，取栈中最后一个元素作为父节点
+      let parent = stack[stack.length - 1];
+      let element = createASTElement(tag, attrs, parent);
+
+      if (root == null) {
+        // 根节点
+        root = element;
+      }
+
+      if (parent) {
+        element.parent = parent; // 更新当前标签的父节点指向为 stack中最后一个元素 parent
+
+        parent.children.push(element);
+      }
+
+      stack.push(element);
+    }
+
+    function end(tagName) {
+      let endTag = stack.pop();
+
+      if (endTag.tag != tagName) {
+        console.error('标签出错！');
+      }
+    }
+
+    function text(chars) {
+      let parent = stack[stack.length - 1];
+      chars = chars.replace(/\s/g, '');
+
+      if (chars) {
+        parent.children.push({
+          text: chars,
+          type: 2
+        });
+      }
+    }
+
+    function advance(len) {
+      html = html.substring(len);
+    }
+
+    function parserStartTag() {
+      const start = html.match(startTagOpen);
+
+      if (start) {
+        const match = {
+          tagName: start[1],
+          attrs: []
+        };
+        advance(start[0].length); // 匹配属性 1要有属性，2不能为开始标签的结束标签  /> > 
+
+        let end;
+        let attr;
+
+        while (!(end = html.match(startTagClose)) && (attr = html.match(attribute))) {
+          match.attrs.push({
+            name: attr[1],
+            value: attr[3] || attr[4] || attr[4]
+          });
+          advance(attr[0].length);
+        }
+
+        if (end) {
+          advance(end[0].length);
+        }
+
+        return match;
+      }
+
+      return false;
+    }
+
+    while (html) {
+      // 解析标签和文本 <
+      let index = html.indexOf('<');
+
+      if (index == 0) {
+        // 解析开始标签 及属性
+        const startTagMatch = parserStartTag();
+
+        if (startTagMatch) {
+          // 开始标签
+          // 发射状态？？
+          start(startTagMatch.tagName, startTagMatch.attrs);
+          continue;
+        }
+
+        let endTagMatch;
+
+        if (endTagMatch = html.match(endTag)) {
+          // 结束标签
+          end(endTagMatch[1]);
+          advance(endTagMatch[0].length);
+          continue;
+        }
+
+        break;
+      } // 文本
+
+
+      if (index > 0) {
+        let chars = html.substring(0, index); // 文本区间
+
+        text(chars);
+        advance(chars.length);
+      }
+    }
+
+    return root;
+  } // <div id="app">{{message}} <p>hello <span>world</span></p></div>
+
+  function compileToFunction(template) {
+    // 1. 模板编译生成ast语法树
+    parserHTML(template); // ?? ?? 代码优化,标记静态节点
+    /**
+    难点排序:
+      1.编译原理
+      2.响应式原理 依赖收集
+      3.组件化开发 （贯穿了vue的流程）
+      4.diff算法 
+     */
+  }
+
   function isFunction(val) {
     return typeof val === 'function';
   }
@@ -14,7 +169,7 @@
 
   let oldArrayPrototype = Array.prototype; // 获取数组 老的原型方法
 
-  let arrayMethods = Object.create(oldArrayPrototype); // 让arrayMethods 通过__proto__能获取到数组的方法
+  let arrayMethods = Object.create(oldArrayPrototype); // 让 arrayMethods 通过__proto__能获取到数组的方法
   // arrayMethods.__proto__ = oldArrayPrototype
   // arrayMethods.push = function 
 
@@ -97,7 +252,7 @@
 
   function defineReactive(obj, key, value) {
     // vue2 慢的原因主要在这个方法中，递归
-    observe(value); // 递归进行观测
+    observe(value); // 递归进行观测 不管有多少层，都需要进行defineProperty
 
     Object.defineProperty(obj, key, {
       get() {
@@ -134,9 +289,10 @@
   }
 
   function proxy(vm, key, source) {
-    // 取值的时候做代理，而不是把_data 属性赋给vm，而且直接赋值会有命名冲突的问题
+    // 懒代码，取值的时才去候做代理，而不是把_data 属性赋给vm，而且直接赋值会有命名冲突的问题
     Object.defineProperty(vm, key, {
       get() {
+        // 并不是做了二次响应式，只是做了一层代码，并无其他复杂逻辑
         return vm[source][key];
       },
 
@@ -154,29 +310,53 @@
     // data 和 vm._data 引用的是同一个空间 -》 data被劫持了  vm._data也被劫持
 
     data = vm._data = isFunction(data) ? data.call(vm) : data; // _data 已经是响应式的了
-    // 需要将data变成响应式的 Object.defineProperty
+    // 需要将data变成响应式的 Object.defineProperty 重写data中所有属性
     // 响应式 观测数据的入口方法，观测对象中的属性
 
     observe(data);
 
     for (let key in data) {
       // vm.message  => vm._data,message
-      proxy(vm, key, '_data'); //代理的是vm上的取值和设置值。和vm._data 没关系
+      proxy(vm, key, '_data'); //代理的是vm上的取值和设置值。和vm._dat a 没关系
     }
   }
 
   function initMixin(Vue) {
-    // 后续组件化开发时，Vue.extend 可以好擦UN宫颈癌你一个子组件，同样可以继承Vue，调用_init方法
+    // 后续组件化开发时，Vue.extend 可以创建一个子组件，同样可以继承Vue，调用_init方法
     Vue.prototype._init = function (options) {
       const vm = this; // 将用户的选项 放在vm上，以便在其他方法中可以获取到options
 
-      vm.$options = options; // 为了后续扩展的方法，都可以湖区到options选项
-      //统一管理所有的数据 ，data props watch computed
+      vm.$options = options; // 为了后续扩展的方法，都可以获取到options选项
+      //统一管理所有的数据 ，data props watch computed 
 
       initState(vm);
 
       if (vm.$options.el) {
-        console.log('页面要挂载');
+        // 将数据挂载到页面上
+        vm.$mount(vm.$options.el);
+      }
+    }; // 模板挂载 new Vue({el}) 等价于 new Vue().$mount(el),因此可以进行方法抽离
+
+
+    Vue.prototype.$mount = function (el) {
+      const vm = this;
+      const opts = vm.$options;
+      el = document.querySelector(el); // 获取真实的dom元素
+
+      vm.$el = el; // 可以有三种方式，编写模板，new Vue({el}), new Vue({template}), new Vue({render})
+      // 模板编译优先级 render > template > el
+
+      if (!opts.render) {
+        // 模板编译
+        let template = opts.template;
+
+        if (!template) {
+          template = el.outerHTML;
+        }
+
+        let render = compileToFunction(template); // 将模板编译成render函数，最终使用的就是render函数
+
+        opts.render = render;
       }
     };
   }
@@ -197,6 +377,7 @@
   // 9.如果是替换成一个新对象，新对象会被进行劫持，如果是数组存放新内容 push unshift() 新增的内容也会被劫持
   // 通过__ob__ 进行标识这个对象被监控过  （在vue中被监控的对象身上都有一个__ob__ 这个属性）
   // 10如果你就想改索引 可以使用$set方法 内部就是splice()
+  // 如果有el 需要挂载到页面上
 
   return Vue;
 
